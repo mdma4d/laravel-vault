@@ -1,0 +1,20 @@
+{
+    "name": "mdma4d/laravel-vault",
+    "description": "SDK to talk with vaultproject.io API",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Dmytro Rudiy",
+            "email": "mdma4d@gmail.com"
+        }
+    ],
+    
+    "require": {
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "autoload": {
+        "psr-4": {
+            "Mdma4d\\Vault\\": "src"
+        }
+    }
+}
