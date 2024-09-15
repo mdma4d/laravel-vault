@@ -1,6 +1,6 @@
 {
     "name": "mdma4d/laravel-vault",
-    "description": "SDK to talk with vaultproject.io API",
+    "description": "Laravel vault integration for store secrets, dynamic database creds, encryption and hashing using  Hashicorp Vault",
     "license": "MIT",
     "authors": [
         {
