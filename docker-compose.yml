@@ -1,0 +1,23 @@
+# Convenience wrapper for running the test-suite in a single PHP version.
+#
+# Examples:
+#   docker compose run --rm test                       # latest deps for the
+#                                                       # composer.json constraints
+#   PHP_VERSION=8.2 LARAVEL='11.*' TESTBENCH='9.*' \
+#       docker compose run --rm test                    # a specific combination
+#   PHP_VERSION=8.0 LARAVEL='8.*' TESTBENCH='6.*' DEPS='--prefer-lowest' \
+#       docker compose run --rm test                    # lowest deps
+#
+# For the full Laravel 8-13 sweep use docker/test-matrix.sh instead.
+services:
+  test:
+    build:
+      context: ./docker
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.3}
+    volumes:
+      - ./:/src:ro
+    environment:
+      LARAVEL: ${LARAVEL:-}
+      TESTBENCH: ${TESTBENCH:-}
+      DEPS: ${DEPS:-}

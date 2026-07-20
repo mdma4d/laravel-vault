@@ -1,0 +1,7 @@
+.git
+vendor
+composer.lock
+node_modules
+.github
+docker
+docker-compose.yml

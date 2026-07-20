@@ -109,3 +109,33 @@ composer test:feature    # feature tests only
 The test-suite mocks all Vault HTTP traffic (via Guzzle's `MockHandler`) and
 Orchestra Testbench, so no running HashiCorp Vault instance or network access
 is required.
+
+### With Docker
+
+To reproduce the full Laravel 8-13 / PHP matrix locally without installing
+several PHP versions, use the bundled Docker setup.
+
+Run the whole matrix (builds one image per PHP version, then runs every row —
+lowest and latest dependencies):
+
+```
+docker/test-matrix.sh          # all combinations
+docker/test-matrix.sh 13       # only Laravel 13 rows
+```
+
+Or run a single combination via Docker Compose:
+
+```
+# Latest deps resolvable for the composer.json constraints on PHP 8.3
+docker compose run --rm test
+
+# A specific combination
+PHP_VERSION=8.2 LARAVEL='11.*' TESTBENCH='9.*' docker compose run --rm test
+
+# Lowest dependencies
+PHP_VERSION=8.0 LARAVEL='8.*' TESTBENCH='6.*' DEPS='--prefer-lowest' \
+    docker compose run --rm test
+```
+
+The package source is mounted read-only, so dependencies are installed inside
+the container and your working copy (and its `vendor/`) is never modified.
