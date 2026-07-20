@@ -1,9 +1,9 @@
 name: tests
 
+# Manual-only: this workflow never runs automatically on push or pull request.
+# Start it by hand from the Actions tab ("Run workflow") if/when needed.
 on:
-  push:
-    branches: [main, master]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   test:
