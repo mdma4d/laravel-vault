@@ -8,9 +8,9 @@ class VaultException extends RuntimeException
 
     public $response;
 
-    public function __construct($message, $code = null, $response = null)
+    public function __construct($message, $code = 0, $response = null)
     {
-        parent::__construct($message, $code);
+        parent::__construct($message, (int) $code);
         $this->response = $response;
     }
 

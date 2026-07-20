@@ -3,16 +3,32 @@
 namespace Mdma4d\Vault;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use Mdma4d\Vault\VaultException;
+use Throwable;
 
 class Vault
 {
+    /**
+     * @var array
+     */
     protected $config;
-    private $_client;
 
-    public function __construct($config)
+    /**
+     * HTTP client used to talk to Vault. Lazily created when not injected.
+     *
+     * @var \GuzzleHttp\ClientInterface|null
+     */
+    protected $client;
+
+    /**
+     * @param  array  $config
+     * @param  \GuzzleHttp\ClientInterface|null  $client  Optional client, mainly for testing.
+     */
+    public function __construct($config, ?ClientInterface $client = null)
     {
-        $this->config = $config;
+        $this->config = (array) $config;
+        $this->client = $client;
     }
 
     // Public methods
@@ -64,6 +80,10 @@ class Vault
     protected function processHmacRequest($text, $action, $hmac = null)
     {
         $path = $this->getHmacPath($action);
+        if (empty($path)) {
+            throw new VaultException('Vault HMAC/Transit configuration is missing');
+        }
+
         $payload = ['input' => base64_encode($text)];
 
         if ($action === 'verify') {
@@ -110,12 +130,16 @@ class Vault
 
     protected function getHmacPath($action)
     {
-        $transit = $this->config['hmac']['path'] ?? $this->config['transit']['path'];
-        $keyRing = $this->config['hmac']['key'] ?? $this->config['transit']['key'];
+        // Prefer dedicated HMAC settings, fall back to the shared transit settings.
+        $transit = $this->config['hmac']['path'] ?? ($this->config['transit']['path'] ?? null);
+        $keyRing = $this->config['hmac']['key'] ?? ($this->config['transit']['key'] ?? null);
+        $address = $this->config['address'] ?? null;
 
-        return isset($this->config['address'], $transit, $keyRing)
-            ? "$transit/$action/$keyRing/sha3-256"
-            : null;
+        if (empty($address) || empty($transit) || empty($keyRing)) {
+            return null;
+        }
+
+        return "$transit/$action/$keyRing/sha3-256";
     }
 
     // Vault API request methods
@@ -135,9 +159,8 @@ class Vault
 
     protected function sendRequest($method, $path, $data = [])
     {
-        $client = new Client(['verify' => false]);
         $headers = [
-            'X-Vault-Token' => $this->config['token'],
+            'X-Vault-Token' => $this->config['token'] ?? null,
             'Content-Type' => 'application/json',
         ];
 
@@ -146,7 +169,7 @@ class Vault
             'body' => json_encode($data),
         ];
 
-        $response = $client->request($method, $this->config['address'] . $path, $options);
+        $response = $this->client()->request($method, $this->address() . $path, $options);
 
         if ($response->getStatusCode() !== 200) {
             throw new VaultException('Vault response error: ' . $response->getBody());
@@ -165,40 +188,97 @@ class Vault
 
     protected function login()
     {
+        // Without AppRole credentials there is nothing to log in with; the
+        // request will proceed with whatever token (if any) is configured.
+        if (empty($this->config['role_id']) || empty($this->config['secret_id'])) {
+            return;
+        }
+
         try {
-            if (!empty($this->config['role_id']) && !empty($this->config['secret_id'])) {
-                $data = [
-                    "role_id" => $this->config['role_id'],
-                    "secret_id" => $this->config['secret_id'],
-                ];
+            $data = [
+                'role_id' => $this->config['role_id'],
+                'secret_id' => $this->config['secret_id'],
+            ];
 
-                $client = new Client(['verify' => false]);
-                $response = $client->post(
-                    $this->config['address'] . '/v1/auth/approle/login',
-                    [
-                        'headers' => ['Content-Type' => 'application/json'],
-                        'body' => json_encode($data),
-                    ]
-                );
+            $response = $this->client()->request(
+                'POST',
+                $this->address() . '/v1/auth/approle/login',
+                [
+                    'headers' => ['Content-Type' => 'application/json'],
+                    'body' => json_encode($data),
+                ]
+            );
 
-                if ($response->getStatusCode() !== 200) {
-                    throw new VaultException('Vault login response error');
-                }
-
-                $responseData = json_decode($response->getBody(), true);
-                $this->config['token'] = $responseData['auth']['client_token'] ?? null;
-
-                if (empty($this->config['token'])) {
-                    throw new VaultException('Invalid token in Vault login response');
-                }
+            if ($response->getStatusCode() !== 200) {
+                throw new VaultException('Vault login response error');
             }
-        } catch (Exception $e) {
+
+            $responseData = json_decode($response->getBody(), true);
+            $this->config['token'] = $responseData['auth']['client_token'] ?? null;
+
+            if (empty($this->config['token'])) {
+                throw new VaultException('Invalid token in Vault login response');
+            }
+        } catch (VaultException $e) {
+            throw $e;
+        } catch (Throwable $e) {
             throw new VaultException('Vault error: ' . $e->getMessage());
         }
     }
 
     public function hasEncryption()
     {
-        return isset($this->config['address'], $this->config['transit']['path'], $this->config['transit']['key']);
+        return isset(
+            $this->config['address'],
+            $this->config['transit']['path'],
+            $this->config['transit']['key']
+        );
+    }
+
+    protected function address()
+    {
+        return $this->config['address'] ?? '';
+    }
+
+    /**
+     * Return the injected client, or lazily build a default one.
+     *
+     * @return \GuzzleHttp\ClientInterface
+     */
+    protected function client()
+    {
+        if ($this->client === null) {
+            $this->client = new Client($this->clientOptions());
+        }
+
+        return $this->client;
+    }
+
+    /**
+     * Build the default Guzzle options.
+     *
+     * SSL verification is handled explicitly: if a CA certificate path is
+     * configured it is used to verify the connection; otherwise the legacy
+     * behaviour (no verification) is preserved for backward compatibility,
+     * unless a "verify" flag is set in the configuration.
+     *
+     * @return array
+     */
+    protected function clientOptions()
+    {
+        if (!empty($this->config['ca_cert_path'])) {
+            $verify = $this->config['ca_cert_path'];
+        } elseif (array_key_exists('verify', $this->config)) {
+            $verify = (bool) $this->config['verify'];
+        } else {
+            $verify = false;
+        }
+
+        return [
+            'verify' => $verify,
+            // Return responses for non-2xx statuses so we can convert Vault
+            // error payloads into VaultException ourselves.
+            'http_errors' => false,
+        ];
     }
 }
