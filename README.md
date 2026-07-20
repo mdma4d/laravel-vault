@@ -3,7 +3,6 @@
 Simple Laravel configuration, dynamic database credentials, encryption and
 hashing backed by [HashiCorp Vault](https://www.vaultproject.io/).
 
-![tests](https://github.com/mdma4d/laravel-vault/actions/workflows/tests.yml/badge.svg)
 
 ## Compatibility
 
