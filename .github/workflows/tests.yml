@@ -11,6 +11,13 @@ jobs:
 
     name: L${{ matrix.laravel }} · PHP ${{ matrix.php }} · ${{ matrix.deps == '--prefer-lowest' && 'lowest' || 'latest' }}
 
+    # The matrix intentionally installs end-of-life Laravel 8-11 (which carry
+    # security advisories and pull abandoned packages) to verify code
+    # compatibility. Disable Composer install blocking for the test harness.
+    env:
+      COMPOSER_NO_BLOCKING: "1"
+      COMPOSER_NO_SECURITY_BLOCKING: "1"
+
     strategy:
       fail-fast: false
       matrix:
